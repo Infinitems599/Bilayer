@@ -56,8 +56,12 @@ def parse_time(value: str) -> int:
     return int(text[:2]) * 60 + int(text[2:4])
 
 
-def window_index(minute: int) -> int | None:
-    for index, (_, start, end) in enumerate(WINDOWS):
+def window_index(
+    minute: int,
+    windows: list[tuple[str, int, int]] | None = None,
+) -> int | None:
+    selected_windows = WINDOWS if windows is None else windows
+    for index, (_, start, end) in enumerate(selected_windows):
         if start <= minute < end:
             return index
     return None
@@ -82,16 +86,18 @@ def read_and_audit(
     metroflow_dir: Path,
     station_ids: list[int],
     calendar: dict[str, bool],
+    windows: list[tuple[str, int, int]] | None = None,
 ) -> tuple[np.ndarray, np.ndarray, dict]:
+    selected_windows = WINDOWS if windows is None else windows
     n = len(station_ids)
     id_to_index = {station: index for index, station in enumerate(station_ids)}
     dates = sorted(calendar)
     date_to_index = {date: index for index, date in enumerate(dates)}
     seen = np.zeros((len(dates), 102, n), dtype=bool)
-    commute = np.zeros((len(GROUPS), len(WINDOWS), n), dtype=float)
+    commute = np.zeros((len(GROUPS), len(selected_windows), n), dtype=float)
     noncommute = np.zeros_like(commute)
     rows_by_group_window = np.zeros(
-        (len(GROUPS), len(WINDOWS)),
+        (len(GROUPS), len(selected_windows)),
         dtype=np.int64,
     )
 
@@ -161,7 +167,7 @@ def read_and_audit(
             if sum(values[field] for field in PURPOSE_FIELDS) == 0:
                 zero_purpose_rows += 1
 
-            selected_window = window_index(minute)
+            selected_window = window_index(minute, selected_windows)
             if selected_window is None:
                 continue
             commuting_value = values["CinFlow"] + values["CoutFlow"]
@@ -202,8 +208,10 @@ def read_and_audit(
         "zero_purpose_flow_records": zero_purpose_rows,
         "rows_by_group_window": {
             GROUPS[group]: {
-                WINDOWS[window][0]: int(rows_by_group_window[group, window])
-                for window in range(len(WINDOWS))
+                selected_windows[window][0]: int(
+                    rows_by_group_window[group, window]
+                )
+                for window in range(len(selected_windows))
             }
             for group in range(len(GROUPS))
         },
@@ -433,6 +441,14 @@ def main() -> None:
     parser.add_argument("--omega", type=float, default=0.5)
     parser.add_argument("--r-steps", type=int, default=21)
     parser.add_argument("--representative-r", type=float, default=4.0)
+    parser.add_argument(
+        "--hourly-perron-only",
+        action="store_true",
+        help=(
+            "Write the 17 hourly commuting/non-commuting Perron roots used "
+            "for Figure 13, then stop."
+        ),
+    )
     args = parser.parse_args()
 
     station_ids, _, neighbors, physical_edges = read_station_info(
@@ -441,6 +457,54 @@ def main() -> None:
     calendar = read_calendar(
         args.metroflow_dir / "MetaData" / "workday_calendar.csv"
     )
+    if args.hourly_perron_only:
+        hourly_windows = [
+            (f"{hour:02d}:00--{hour + 1:02d}:00", hour * 60, (hour + 1) * 60)
+            for hour in range(6, 23)
+        ]
+        hourly_commute, hourly_noncommute, _ = read_and_audit(
+            args.metroflow_dir,
+            station_ids,
+            calendar,
+            hourly_windows,
+        )
+        hourly_rows: list[dict] = []
+        for index, (window, _, _) in enumerate(hourly_windows):
+            commuting = hourly_commute[0, index]
+            noncommuting = hourly_noncommute[0, index]
+            total = commuting + noncommuting
+            q_commuting = np.divide(
+                commuting,
+                total,
+                out=np.zeros_like(commuting),
+                where=total > 0,
+            )
+            q_noncommuting = np.divide(
+                noncommuting,
+                total,
+                out=np.zeros_like(noncommuting),
+                where=total > 0,
+            )
+            k_commuting = build_kernel(neighbors, commuting, q_commuting)
+            k_noncommuting = build_kernel(
+                neighbors,
+                noncommuting,
+                q_noncommuting,
+            )
+            rho_commuting, _ = spectral_radius(k_commuting)
+            rho_noncommuting, _ = spectral_radius(k_noncommuting)
+            hourly_rows.append(
+                {
+                    "window": window,
+                    "rho_commuting": float(rho_commuting),
+                    "rho_noncommuting": float(rho_noncommuting),
+                }
+            )
+        output_path = args.output_dir / "hourly_perron_roots.csv"
+        write_csv(output_path, hourly_rows)
+        print(json.dumps({"hourly_perron_roots": str(output_path)}, indent=2))
+        return
+
     commute, noncommute, audit = read_and_audit(
         args.metroflow_dir,
         station_ids,

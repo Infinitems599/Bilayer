@@ -23,6 +23,11 @@ uv run python metroflow_dmp.py `
   --metroflow-dir D:\path\to\MetroFlow `
   --output-dir results\metroflow_dmp
 
+uv run python metroflow_dmp.py `
+  --metroflow-dir D:\path\to\MetroFlow `
+  --output-dir results\metroflow_hourly `
+  --hourly-perron-only
+
 uv run python metroflow_mc.py `
   --metroflow-dir D:\path\to\MetroFlow `
   --output-dir results\metroflow_mc
@@ -30,6 +35,7 @@ uv run python metroflow_mc.py `
 
 The scripts read the released processed data without changing it and write
 machine-readable CSV/JSON outputs only. In particular,
+`hourly_perron_roots.csv` contains the 17 hourly roots used in Figure 13;
 `primary_dmp_scan.csv` contains the Figure 14 DMP curve and Theorem 4.2
 certificate fields; `primary_scan_mc.csv`, `allocation_rule_mc.csv`, and
 `omega_sensitivity_mc.csv` contain the corresponding MC point estimates. Any
