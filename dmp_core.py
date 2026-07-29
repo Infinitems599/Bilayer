@@ -284,10 +284,25 @@ def coupling_weights(mode: str, degree: np.ndarray, source_strength: np.ndarray,
 
 
 def build_B(kc, kn, theta_c_to_n: np.ndarray, theta_n_to_c: np.ndarray):
+    """Build the MetroFlow exposure matrix with source-budget conservation.
+
+    A column of ``kc`` or ``kn`` sums to the corresponding empirical layer
+    share of the source station.  The same share must therefore multiply the
+    part transferred to the other layer.  This preserves each source-layer
+    budget instead of adding an unscaled inter-layer probability.
+    """
+    budget_c = np.asarray(kc.sum(axis=0)).ravel()
+    budget_n = np.asarray(kn.sum(axis=0)).ravel()
     keep_c = sparse.diags(1.0 - theta_c_to_n, format="csc")
     keep_n = sparse.diags(1.0 - theta_n_to_c, format="csc")
-    switch_c_to_n = sparse.diags(theta_c_to_n, format="csc")
-    switch_n_to_c = sparse.diags(theta_n_to_c, format="csc")
+    switch_c_to_n = sparse.diags(
+        budget_c * theta_c_to_n,
+        format="csc",
+    )
+    switch_n_to_c = sparse.diags(
+        budget_n * theta_n_to_c,
+        format="csc",
+    )
     return sparse.bmat(
         [
             [kc @ keep_c, switch_n_to_c],

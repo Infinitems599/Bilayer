@@ -23,15 +23,15 @@ from dmp_core import EPS, spectral_radius
 class Figure8Config:
     """Parameters of the first-order phase-diagram calculation."""
 
-    node_count: int = 300
-    degree_min: float = 3.0
-    degree_max: float = 19.0
+    node_count: int = 80
+    degree_min: float = 4.0
+    degree_max: float = 22.0
     grid_size: int = 25
     instances: int = 10
     ratios: tuple[float, ...] = (4.0, 8.0, 12.0)
     network_types: tuple[str, ...] = ("ER", "WS", "BA")
-    omega: float = 0.7
-    beta_mean_share: float = 0.62
+    omega: float = 0.62
+    beta_mean_share: float = 1.0
     recovery_probability: float = 0.3
     seed: int = 13000
 
@@ -150,17 +150,21 @@ def generate_figure8_data(output_dir: str | Path, config: Figure8Config = Figure
                     first, second = _synthetic_layers(config, network_type, float(degree_alpha), float(degree_beta), _seed(config, network_type, alpha_index, beta_index, instance))
                     alpha_share = _activity_profile(first, 1.0, heterogeneity[network_type])
                     beta_share = _activity_profile(second, config.beta_mean_share, heterogeneity[network_type])
-                    baseline = sparse.block_diag((_column_kernel(first, alpha_share), _column_kernel(second, beta_share)), format="csr")
-                    rho0 = spectral_radius(baseline)[0]
+                    k_alpha = _column_kernel(first, alpha_share)
+                    rho_alpha = spectral_radius(k_alpha)[0]
                     for ratio in config.ratios:
                         coupled = _contact_matrix(first, second, ratio, config, alpha_share, beta_share)
                         rho = spectral_radius(coupled)[0]
-                        # The theorem is evaluated at the uncoupled
-                        # first-order threshold lambda_0=mu/rho_0 (with the
-                        # common contact-capacity factor absorbed into B).
+                        # The theorem analogue is evaluated at the uncoupled
+                        # first-order threshold lambda_0=mu/(C*rho_alpha);
+                        # the common factor C is absorbed into this
+                        # first-order matrix scaling.
                         # Therefore its block inequalities apply to
-                        # H_c(lambda_0)=(mu/rho_0) B_c, not to B_c itself.
-                        certificate_matrix = coupled * (config.recovery_probability / rho0)
+                        # H_c(lambda_0)=(mu/rho_alpha) B_c after that
+                        # absorption, not to B_c itself.
+                        certificate_matrix = coupled * (
+                            config.recovery_probability / rho_alpha
+                        )
                         records.append({
                             "network_type": network_type,
                             "r": ratio,
@@ -168,8 +172,10 @@ def generate_figure8_data(output_dir: str | Path, config: Figure8Config = Figure
                             "degree_beta": degree_beta,
                             "instance": instance,
                             "seed": _seed(config, network_type, alpha_index, beta_index, instance),
-                            "rho_ratio": rho / rho0,
-                            "threshold_gain_pct": 100.0 * (rho0 / rho - 1.0),
+                            "rho_ratio": rho / rho_alpha,
+                            "threshold_gain_pct": 100.0 * (
+                                rho_alpha / rho - 1.0
+                            ),
                             "theorem_4_2_satisfied": _certificate(certificate_matrix, config.node_count, config.recovery_probability),
                         })
     instance_path = output / "figure8_instances.csv"

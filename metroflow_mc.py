@@ -267,8 +267,13 @@ def main() -> None:
         default=",".join(str(value) for value in np.geomspace(0.1, 10.0, 21)),
     )
     parser.add_argument(
-        "--robustness-ratios",
+        "--allocation-ratios",
         default=",".join(str(value) for value in np.geomspace(0.1, 10.0, 5)),
+    )
+    parser.add_argument(
+        "--omega-ratios",
+        default="0.31622776601683794,0.5623413251903491,1.0,"
+        "3.1622776601683795,10.0",
     )
     parser.add_argument("--seed", type=int, default=20260729)
     args = parser.parse_args()
@@ -280,8 +285,12 @@ def main() -> None:
         [float(value) for value in args.primary_ratios.split(",")],
         dtype=float,
     )
-    robustness_ratios = np.asarray(
-        [float(value) for value in args.robustness_ratios.split(",")],
+    allocation_ratios = np.asarray(
+        [float(value) for value in args.allocation_ratios.split(",")],
+        dtype=float,
+    )
+    omega_ratios = np.asarray(
+        [float(value) for value in args.omega_ratios.split(",")],
         dtype=float,
     )
     window_indices = {
@@ -411,7 +420,7 @@ def main() -> None:
 
         if args.scope in {"all", "allocation"}:
             for mode_index, mode in enumerate(MODES):
-                for r_index, r in enumerate(robustness_ratios):
+                for r_index, r in enumerate(allocation_ratios):
                     dmp_threshold, mc_result = evaluate(
                         mode,
                         args.omega,
@@ -433,7 +442,7 @@ def main() -> None:
 
         if args.scope in {"all", "omega"}:
             for omega_index, omega in enumerate(OMEGAS):
-                for r_index, r in enumerate(robustness_ratios):
+                for r_index, r in enumerate(omega_ratios):
                     dmp_threshold, mc_result = evaluate(
                         "data-share",
                         omega,
@@ -471,7 +480,8 @@ def main() -> None:
         "lambda_ratios": lambda_ratios.tolist(),
         "bootstraps": args.bootstraps,
         "primary_ratios": primary_ratios.tolist(),
-        "robustness_ratios": robustness_ratios.tolist(),
+        "allocation_ratios": allocation_ratios.tolist(),
+        "omega_ratios": omega_ratios.tolist(),
         "scope": args.scope,
         "window_indices": sorted(window_indices),
         "seed": args.seed,

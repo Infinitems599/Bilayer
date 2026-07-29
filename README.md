@@ -28,7 +28,11 @@ uv run python metroflow_mc.py `
   --output-dir results\metroflow_mc
 ```
 
-The scripts read the released processed data without changing it and write machine-readable CSV/JSON outputs only.
+The scripts read the released processed data without changing it and write
+machine-readable CSV/JSON outputs only. In particular,
+`primary_dmp_scan.csv` contains the Figure 14 DMP curve and Theorem 4.2
+certificate fields; `primary_scan_mc.csv`, `allocation_rule_mc.csv`, and
+`omega_sensitivity_mc.csv` contain the corresponding MC point estimates.
 
 ## Figure 8 data
 
@@ -41,6 +45,9 @@ uv run python -m calculation_code figure8 `
 ```
 
 This writes `figure8_instances.csv`, `figure8_grid.csv`, and `figure8_settings.json`. For a short installation check, append `--quick`.
+The default configuration is the manuscript configuration:
+$N=80$, 25 degree values from 4 to 22, $r=4,8,12$,
+$\omega=0.62$, 10 realizations, and base seed `13000`.
 
 ```python
 from calculation_code import Figure8Config, generate_figure8_data

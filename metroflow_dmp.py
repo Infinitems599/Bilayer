@@ -15,6 +15,7 @@ from dmp_core import (
     allocate_theta,
     build_B,
     build_kernel,
+    dmp_nonbacktracking_matrix,
     read_station_info,
     spectral_radius,
 )
@@ -268,6 +269,47 @@ def dmp_radius_c1(matrix: sparse.spmatrix) -> float:
     return float(abs(eigenvalues[0]))
 
 
+def matrix_radius(matrix: sparse.spmatrix) -> float:
+    if matrix.shape[0] == 0 or matrix.nnz == 0:
+        return 0.0
+    return float(spectral_radius(matrix)[0])
+
+
+def dmp_certificate_equivalent(
+    matrix: sparse.spmatrix,
+    lambda0: float,
+    mu: float,
+    layer_size: int,
+) -> dict:
+    """Evaluate Theorem 4.2 using its equivalent sparse M-matrix test."""
+    operator, edge_sources = dmp_nonbacktracking_matrix(matrix, lambda0, 1.0)
+    if operator.shape[0] == 0:
+        return {
+            "rho_A": 0.0,
+            "rho_D": 0.0,
+            "rho_full": 0.0,
+            "certified": True,
+        }
+    alpha = np.flatnonzero(edge_sources < layer_size)
+    beta = np.flatnonzero(edge_sources >= layer_size)
+    order = np.r_[alpha, beta]
+    ordered = operator[order, :][:, order].tocsr()
+    split = alpha.size
+    rho_a = matrix_radius(ordered[:split, :split])
+    rho_d = matrix_radius(ordered[split:, split:])
+    rho_full = matrix_radius(ordered)
+    return {
+        "rho_A": rho_a,
+        "rho_D": rho_d,
+        "rho_full": rho_full,
+        "certified": (
+            rho_a < mu - 1e-10
+            and rho_d < mu - 1e-10
+            and rho_full < mu - 1e-10
+        ),
+    }
+
+
 def make_context(
     neighbors: list[list[int]],
     degree: np.ndarray,
@@ -391,7 +433,7 @@ def main() -> None:
     )
     parser.add_argument("--mu", type=float, default=0.3)
     parser.add_argument("--omega", type=float, default=0.5)
-    parser.add_argument("--r-steps", type=int, default=31)
+    parser.add_argument("--r-steps", type=int, default=21)
     parser.add_argument("--representative-r", type=float, default=4.0)
     args = parser.parse_args()
 
@@ -449,8 +491,53 @@ def main() -> None:
     )
     allocation_rows: list[dict] = []
     omega_rows: list[dict] = []
+    primary_rows: list[dict] = []
     for window, _, _ in WINDOWS:
         context = contexts[("all", window)]
+        for ratio in ratios:
+            theta_c_to_n, theta_n_to_c = matched_thetas(
+                context,
+                "data-share",
+                args.omega,
+                float(ratio),
+            )
+            matrix = build_B(
+                context["k_c"],
+                context["k_n"],
+                theta_c_to_n,
+                theta_n_to_c,
+            )
+            threshold, gain = threshold_gain(
+                context,
+                "data-share",
+                args.omega,
+                float(ratio),
+                args.mu,
+            )
+            certificate = dmp_certificate_equivalent(
+                matrix,
+                context["lambda0"],
+                args.mu,
+                len(context["q_c"]),
+            )
+            primary_rows.append(
+                {
+                    "window": window,
+                    "r": float(ratio),
+                    "omega": args.omega,
+                    "lambda0_dmp": context["lambda0"],
+                    "lambda_c_dmp": threshold,
+                    "dmp_gain_pct": gain,
+                    "dmp_rho_A_ratio": certificate["rho_A"] / args.mu,
+                    "dmp_rho_D_ratio": certificate["rho_D"] / args.mu,
+                    "dmp_radius_at_lambda0_ratio": (
+                        certificate["rho_full"] / args.mu
+                    ),
+                    "dmp_theorem_4_2_satisfied": int(
+                        certificate["certified"]
+                    ),
+                }
+            )
         for mode in MODES:
             for ratio in ratios:
                 threshold, gain = threshold_gain(
@@ -522,6 +609,7 @@ def main() -> None:
         encoding="utf-8",
     )
     write_csv(args.output_dir / "window_contexts.csv", context_rows)
+    write_csv(args.output_dir / "primary_dmp_scan.csv", primary_rows)
     write_csv(args.output_dir / "allocation_rule_scan.csv", allocation_rows)
     write_csv(args.output_dir / "omega_sensitivity.csv", omega_rows)
     write_csv(args.output_dir / "day_group_comparison.csv", day_group_rows)
@@ -529,6 +617,9 @@ def main() -> None:
         json.dumps(
             {
                 "audit": str(args.output_dir / "data_audit.json"),
+                "primary_dmp_scan": str(
+                    args.output_dir / "primary_dmp_scan.csv"
+                ),
                 "allocation_rule_scan": str(
                     args.output_dir / "allocation_rule_scan.csv"
                 ),
