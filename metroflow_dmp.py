@@ -363,20 +363,18 @@ def matched_thetas(
     omega: float,
     ratio: float,
 ) -> tuple[np.ndarray, np.ndarray]:
-    high_to_low = omega * ratio / (1.0 + ratio)
-    reverse = omega / (1.0 + ratio)
+    mean_high_to_low = omega * ratio / (1.0 + ratio)
+    mean_reverse = omega / (1.0 + ratio)
     if context["high_layer"] == "commuting":
-        scale_c_to_n, scale_n_to_c = high_to_low, reverse
+        mean_c_to_n, mean_n_to_c = mean_high_to_low, mean_reverse
         profile_c_to_n, profile_n_to_c = context["q_n"], context["q_c"]
     else:
-        scale_n_to_c, scale_c_to_n = high_to_low, reverse
+        mean_n_to_c, mean_c_to_n = mean_high_to_low, mean_reverse
         profile_n_to_c, profile_c_to_n = context["q_c"], context["q_n"]
 
-    mean_c_to_n = float(scale_c_to_n * profile_c_to_n.mean())
-    mean_n_to_c = float(scale_n_to_c * profile_n_to_c.mean())
     if mode == "data-share":
-        theta_c_to_n = scale_c_to_n * profile_c_to_n
-        theta_n_to_c = scale_n_to_c * profile_n_to_c
+        theta_c_to_n = allocate_theta(mean_c_to_n, profile_c_to_n)
+        theta_n_to_c = allocate_theta(mean_n_to_c, profile_n_to_c)
     elif mode == "uniform":
         theta_c_to_n = np.full_like(profile_c_to_n, mean_c_to_n)
         theta_n_to_c = np.full_like(profile_n_to_c, mean_n_to_c)

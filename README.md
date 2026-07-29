@@ -32,7 +32,9 @@ The scripts read the released processed data without changing it and write
 machine-readable CSV/JSON outputs only. In particular,
 `primary_dmp_scan.csv` contains the Figure 14 DMP curve and Theorem 4.2
 certificate fields; `primary_scan_mc.csv`, `allocation_rule_mc.csv`, and
-`omega_sensitivity_mc.csv` contain the corresponding MC point estimates.
+`omega_sensitivity_mc.csv` contain the corresponding MC point estimates. Any
+preliminary DMP/MC point-sign mismatch is automatically recomputed with 5000
+runs using the same deterministic seed.
 
 ## Figure 8 data
 

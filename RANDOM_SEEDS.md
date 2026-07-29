@@ -17,8 +17,16 @@ This file records the seeds of the numerical calculations that produced the curr
 | 11 | MetroFlow conceptual construction | None |
 | 12 | Shanghai station map | None; produced deterministically from the released processed MetroFlow table |
 | 13 | Hourly Perron-root variation | None; deterministic spectral calculation from the processed MetroFlow table |
-| 14 | Five-window data-share DMP--MC scan | MetroFlow MC base `20260729`; baseline window `w` uses `20260729+100000w`; coupled point `(w,j)` uses `20260729+100000w+10000+(100+j)*1000`, with `w=0,...,4`, `j=0,...,20` |
-| 15 | Three-allocation-rule DMP--MC comparison | MetroFlow MC base `20260729`; coupled point `(w,m,j)` uses `20260729+100000w+10000+(1000+100m+j)*1000`, with `m=0,1,2` and `j=0,...,4` |
-| 16 | Five-$\omega$ DMP--MC sensitivity comparison | MetroFlow MC base `20260729`; coupled point `(w,o,j)` uses `20260729+100000w+10000+(2000+100o+j)*1000`, with `o=0,...,4` and `j=0,...,4` |
+| 14 | Five-window data-share DMP--MC scan | MetroFlow MC base `20260729`; baseline window `w` uses `20260729+100000w`; each coupled point uses the stable rule below with `mode=data-share` and `omega=0.5` |
+| 15 | Three-allocation-rule DMP--MC comparison | Same MetroFlow base and window rule; each coupled point uses its allocation-rule name, `omega=0.5`, and its plotted `r` in the stable rule below |
+| 16 | Five-$\omega$ DMP--MC sensitivity comparison | Same MetroFlow base and window rule; each coupled point uses `mode=data-share` and its plotted `omega` and `r` in the stable rule below |
 
-For MetroFlow Figures 14, 15, and 16, infection-probability scan `l=0,...,6` uses the configuration seed plus `10007*l`; the bootstrap generator uses the configuration seed plus `900001`. The retained MC settings file records the base seed `20260729`, and refined points use the same deterministic schedule with more realizations rather than selected replacement seeds.
+For MetroFlow Figures 14, 15, and 16, define
+`h = crc32(f"{mode}|{omega:.12g}|{r:.12g}") mod 1000000`.
+The coupled configuration seed is `20260729+100000*w+10000+h`, where
+`w=0,...,4` is the time-window index. Thus a configuration has the same seed
+whether it is run alone or as part of a full scan. Infection-probability scan
+`l=0,...,6` uses the configuration seed plus `10007*l`; the bootstrap
+generator uses the configuration seed plus `900001`. Refined points use the
+same deterministic schedule with more realizations rather than selected
+replacement seeds.

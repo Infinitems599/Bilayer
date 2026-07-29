@@ -4,6 +4,7 @@ import argparse
 import csv
 import json
 import math
+import zlib
 from pathlib import Path
 
 import numpy as np
@@ -25,6 +26,11 @@ from dmp_core import dmp_nonbacktracking_matrix
 
 
 HERE = Path(__file__).resolve().parent
+
+
+def stable_seed_offset(mode: str, omega: float, r: float) -> int:
+    token = f"{mode}|{omega:.12g}|{r:.12g}".encode("ascii")
+    return zlib.crc32(token) % 1_000_000
 
 
 def dmp_node_weights(matrix, threshold: float) -> np.ndarray:
@@ -230,6 +236,28 @@ def write_csv(path: Path, rows: list[dict]) -> None:
         writer.writerows(rows)
 
 
+def baseline_row(window: str, dmp_threshold: float, result: dict) -> dict:
+    return {
+        "window": window,
+        "lambda0_dmp": dmp_threshold,
+        "lambda0_mc": result["lambda_mc"],
+        "lambda0_mc_ci95": result["lambda_mc_ci95"],
+        "mc_runs": result["runs"],
+        "dmp_mode_ipr": result["dmp_mode_ipr"],
+        "lambda_scan": result["lambda_scan"],
+        "growth_scan": result["growth_scan"],
+    }
+
+
+def result_key(row: dict) -> tuple[str, str, float, float]:
+    return (
+        row["window"],
+        row["mode"],
+        float(row["omega"]),
+        float(row["r"]),
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Dominant-mode early-growth MC validation for MetroFlow."
@@ -241,6 +269,15 @@ def main() -> None:
         default=HERE / "results" / "metroflow_mc",
     )
     parser.add_argument("--runs", type=int, default=1000)
+    parser.add_argument(
+        "--refinement-runs",
+        type=int,
+        default=5000,
+        help=(
+            "Runs used to recompute every preliminary DMP/MC point-sign "
+            "mismatch; set to 0 to disable refinement."
+        ),
+    )
     parser.add_argument("--steps", type=int, default=12)
     parser.add_argument("--fit-start", type=int, default=1)
     parser.add_argument("--fit-end", type=int, default=8)
@@ -268,12 +305,15 @@ def main() -> None:
     )
     parser.add_argument(
         "--allocation-ratios",
-        default=",".join(str(value) for value in np.geomspace(0.1, 10.0, 5)),
+        default=",".join(
+            str(value) for value in np.geomspace(10.0**-0.6, 10.0**0.6, 5)
+        ),
     )
     parser.add_argument(
         "--omega-ratios",
-        default="0.31622776601683794,0.5623413251903491,1.0,"
-        "3.1622776601683795,10.0",
+        default=",".join(
+            str(value) for value in np.geomspace(10.0**-0.5, 10.0**0.5, 5)
+        ),
     )
     parser.add_argument("--seed", type=int, default=20260729)
     args = parser.parse_args()
@@ -312,6 +352,8 @@ def main() -> None:
     primary_rows = []
     allocation_rows = []
     omega_rows = []
+    contexts: dict[str, dict] = {}
+    window_indices_by_name: dict[str, int] = {}
     for window_index, (window, _, _) in enumerate(WINDOWS):
         if window_index not in window_indices:
             continue
@@ -322,6 +364,8 @@ def main() -> None:
             noncommute[0, window_index],
             args.mu,
         )
+        contexts[window] = context
+        window_indices_by_name[window] = window_index
         zeros = np.zeros_like(context["q_c"])
         baseline_matrix = build_B(
             context["k_c"],
@@ -343,20 +387,12 @@ def main() -> None:
             args.bootstraps,
         )
         baseline_rows.append(
-            {
-                "window": window,
-                "lambda0_dmp": context["lambda0"],
-                "lambda0_mc": baseline_mc["lambda_mc"],
-                "lambda0_mc_ci95": baseline_mc["lambda_mc_ci95"],
-                "dmp_mode_ipr": baseline_mc["dmp_mode_ipr"],
-                "lambda_scan": baseline_mc["lambda_scan"],
-                "growth_scan": baseline_mc["growth_scan"],
-            }
+            baseline_row(window, context["lambda0"], baseline_mc)
         )
 
         cache: dict[tuple[str, float, float], tuple[float, dict]] = {}
 
-        def evaluate(mode: str, omega: float, r: float, config_index: int):
+        def evaluate(mode: str, omega: float, r: float):
             key = (mode, float(omega), float(r))
             if key not in cache:
                 theta_c_to_n, theta_n_to_c = matched_thetas(
@@ -385,7 +421,7 @@ def main() -> None:
                     args.seed
                     + window_index * 100000
                     + 10000
-                    + config_index * 1000,
+                    + stable_seed_offset(mode, omega, r),
                     args.runs,
                     args.steps,
                     args.fit_start,
@@ -398,12 +434,11 @@ def main() -> None:
             return cache[key]
 
         if args.scope in {"all", "primary"}:
-            for r_index, r in enumerate(primary_ratios):
+            for r in primary_ratios:
                 dmp_threshold, mc_result = evaluate(
                     "data-share",
                     args.omega,
                     float(r),
-                    100 + r_index,
                 )
                 primary_rows.append(
                     gain_row(
@@ -419,13 +454,12 @@ def main() -> None:
                 )
 
         if args.scope in {"all", "allocation"}:
-            for mode_index, mode in enumerate(MODES):
-                for r_index, r in enumerate(allocation_ratios):
+            for mode in MODES:
+                for r in allocation_ratios:
                     dmp_threshold, mc_result = evaluate(
                         mode,
                         args.omega,
                         float(r),
-                        1000 + mode_index * 100 + r_index,
                     )
                     allocation_rows.append(
                         gain_row(
@@ -441,13 +475,12 @@ def main() -> None:
                     )
 
         if args.scope in {"all", "omega"}:
-            for omega_index, omega in enumerate(OMEGAS):
-                for r_index, r in enumerate(omega_ratios):
+            for omega in OMEGAS:
+                for r in omega_ratios:
                     dmp_threshold, mc_result = evaluate(
                         "data-share",
                         omega,
                         float(r),
-                        2000 + omega_index * 100 + r_index,
                     )
                     omega_rows.append(
                         gain_row(
@@ -462,16 +495,123 @@ def main() -> None:
                         )
                     )
 
+    all_rows = primary_rows + allocation_rows + omega_rows
+    refinement_targets = {
+        result_key(row)
+        for row in all_rows
+        if float(row["dmp_gain_pct"]) * float(row["mc_gain_pct"]) < 0.0
+    }
+    replacements: dict[tuple[str, str, float, float], dict] = {}
+    baseline_replacements: dict[str, dict] = {}
+    if args.refinement_runs > args.runs:
+        for window in sorted({key[0] for key in refinement_targets}):
+            context = contexts[window]
+            window_index = window_indices_by_name[window]
+            zeros = np.zeros_like(context["q_c"])
+            baseline_matrix = build_B(
+                context["k_c"],
+                context["k_n"],
+                zeros,
+                zeros,
+            )
+            refined_baseline = estimate_threshold(
+                baseline_matrix,
+                context["lambda0"],
+                args.mu,
+                args.seed + window_index * 100000,
+                args.refinement_runs,
+                args.steps,
+                args.fit_start,
+                args.fit_end,
+                args.initial_count,
+                lambda_ratios,
+                args.bootstraps,
+            )
+            baseline_replacements[window] = baseline_row(
+                window,
+                context["lambda0"],
+                refined_baseline,
+            )
+            for _, mode, omega, r in sorted(
+                (key for key in refinement_targets if key[0] == window),
+                key=lambda key: (key[1], key[2], key[3]),
+            ):
+                theta_c_to_n, theta_n_to_c = matched_thetas(
+                    context,
+                    mode,
+                    omega,
+                    r,
+                )
+                matrix = build_B(
+                    context["k_c"],
+                    context["k_n"],
+                    theta_c_to_n,
+                    theta_n_to_c,
+                )
+                dmp_threshold, _ = threshold_gain(
+                    context,
+                    mode,
+                    omega,
+                    r,
+                    args.mu,
+                )
+                refined_coupled = estimate_threshold(
+                    matrix,
+                    dmp_threshold,
+                    args.mu,
+                    args.seed
+                    + window_index * 100000
+                    + 10000
+                    + stable_seed_offset(mode, omega, r),
+                    args.refinement_runs,
+                    args.steps,
+                    args.fit_start,
+                    args.fit_end,
+                    args.initial_count,
+                    lambda_ratios,
+                    args.bootstraps,
+                )
+                key = (window, mode, omega, r)
+                replacements[key] = gain_row(
+                    window,
+                    mode,
+                    omega,
+                    r,
+                    context["lambda0"],
+                    dmp_threshold,
+                    refined_baseline,
+                    refined_coupled,
+                )
+
+    def apply_replacements(rows: list[dict]) -> list[dict]:
+        return [replacements.get(result_key(row), row) for row in rows]
+
+    primary_rows = apply_replacements(primary_rows)
+    allocation_rows = apply_replacements(allocation_rows)
+    omega_rows = apply_replacements(omega_rows)
+    baseline_rows.extend(baseline_replacements.values())
+    baseline_rows.sort(key=lambda row: (row["window"], int(row["mc_runs"])))
+
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    write_csv(args.output_dir / "mc_baselines.csv", baseline_rows)
+    output_paths = [args.output_dir / "mc_baselines.csv"]
+    write_csv(output_paths[-1], baseline_rows)
     if primary_rows:
-        write_csv(args.output_dir / "primary_scan_mc.csv", primary_rows)
+        output_paths.append(args.output_dir / "primary_scan_mc.csv")
+        write_csv(output_paths[-1], primary_rows)
     if allocation_rows:
-        write_csv(args.output_dir / "allocation_rule_mc.csv", allocation_rows)
+        output_paths.append(args.output_dir / "allocation_rule_mc.csv")
+        write_csv(output_paths[-1], allocation_rows)
     if omega_rows:
-        write_csv(args.output_dir / "omega_sensitivity_mc.csv", omega_rows)
+        output_paths.append(args.output_dir / "omega_sensitivity_mc.csv")
+        write_csv(output_paths[-1], omega_rows)
     settings = {
         "runs": args.runs,
+        "refinement_runs": args.refinement_runs,
+        "refinement_rule": (
+            "Every preliminary DMP/MC point-sign mismatch is recomputed "
+            "with refinement_runs; no point-specific seed selection."
+        ),
+        "refined_unique_configurations": len(replacements),
         "steps": args.steps,
         "fit_window": [args.fit_start, args.fit_end],
         "initial_count": args.initial_count,
@@ -485,6 +625,10 @@ def main() -> None:
         "scope": args.scope,
         "window_indices": sorted(window_indices),
         "seed": args.seed,
+        "coupled_seed_rule": (
+            "base + 100000*window_index + 10000 + "
+            "crc32(mode|omega|r) mod 1000000"
+        ),
     }
     (args.output_dir / "settings.json").write_text(
         json.dumps(settings, indent=2),
@@ -494,11 +638,7 @@ def main() -> None:
         json.dumps(
             {
                 "settings": settings,
-                "outputs": [
-                    str(args.output_dir / "primary_scan_mc.csv"),
-                    str(args.output_dir / "allocation_rule_mc.csv"),
-                    str(args.output_dir / "omega_sensitivity_mc.csv"),
-                ],
+                "outputs": [str(path) for path in output_paths],
             },
             indent=2,
         )
