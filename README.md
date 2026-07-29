@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Calculation code
 
 Code repository for *Epidemic spreading on multilayer networks with asymmetric layer-preferential coupling*.
@@ -52,3 +53,7 @@ print(paths["grid"])
 ## Random seeds
 
 The full figure-by-figure seed list is in [RANDOM_SEEDS.md](RANDOM_SEEDS.md). MetroFlow MC uses base seed `20260729`; DMP calculations are deterministic.
+=======
+# Bilayer
+Code repository for Epidemic spreading on multilayer networks with asymmetric layer-preferential coupling.
+>>>>>>> b9ce31f04e4c011957c6c248edf8bcb7f9069b88
