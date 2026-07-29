@@ -1,0 +1,8 @@
+# Python and uv runtime artifacts
+__pycache__/
+*.py[cod]
+.venv/
+.uv-cache/
+
+# Calculation outputs
+results/
