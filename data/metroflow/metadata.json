@@ -1,0 +1,47 @@
+{
+  "format": "SNAP-style tab-separated text",
+  "directed": false,
+  "node_count": 302,
+  "edge_count": 349,
+  "connected": true,
+  "networks": [
+    {
+      "window": "06:00--07:00",
+      "nodes": "metroflow_01_0600_0700_nodes.txt",
+      "edges": "metroflow_01_0600_0700_edges.txt",
+      "commuting_activity": 17277040.0,
+      "noncommuting_activity": 25672685.0
+    },
+    {
+      "window": "07:00--09:00",
+      "nodes": "metroflow_02_0700_0900_nodes.txt",
+      "edges": "metroflow_02_0700_0900_edges.txt",
+      "commuting_activity": 162569992.0,
+      "noncommuting_activity": 160675940.0
+    },
+    {
+      "window": "09:00--17:00",
+      "nodes": "metroflow_03_0900_1700_nodes.txt",
+      "edges": "metroflow_03_0900_1700_edges.txt",
+      "commuting_activity": 107928314.0,
+      "noncommuting_activity": 464267504.0
+    },
+    {
+      "window": "17:00--19:00",
+      "nodes": "metroflow_04_1700_1900_nodes.txt",
+      "edges": "metroflow_04_1700_1900_edges.txt",
+      "commuting_activity": 102555715.0,
+      "noncommuting_activity": 171463669.0
+    },
+    {
+      "window": "19:00--23:00",
+      "nodes": "metroflow_05_1900_2300_nodes.txt",
+      "edges": "metroflow_05_1900_2300_edges.txt",
+      "commuting_activity": 76615675.0,
+      "noncommuting_activity": 168710684.0
+    }
+  ],
+  "source_rows": 3788892,
+  "duplicate_rows": 0,
+  "unexpected_keys": 0
+}

@@ -9,11 +9,18 @@ Calculation-only reproduction package for the revised manuscript. It writes CSV/
 - `dmp_core.py`: DMP operator and spectral threshold routines.
 - `metroflow_dmp.py`: MetroFlow DMP scans and data audit.
 - `metroflow_mc.py`: MetroFlow early-growth MC estimates.
+- `data/metroflow/`: five processed MetroFlow networks in SNAP-style node and
+  edge files.
 - `calculation_code/`: importable experiment interface; Figure 8 is provided as the example.
 
 ## Setup and MetroFlow outputs
 
-The processed MetroFlow directory must contain `stationInfo.csv`, `metroData_InOutFlow.csv`, and `MetaData/workday_calendar.csv`.
+The five constructed networks used in the manuscript are included under
+`data/metroflow`. Each window contains a 302-node table with two-layer
+activities and a 349-edge undirected physical edge list. The original
+processed MetroFlow directory is needed only to regenerate these files or
+rerun the complete aggregation; it must contain `stationInfo.csv`,
+`metroData_InOutFlow.csv`, and `MetaData/workday_calendar.csv`.
 
 ```powershell
 $env:UV_CACHE_DIR='.uv-cache'
@@ -56,6 +63,9 @@ This writes `figure8_instances.csv`, `figure8_grid.csv`, and `figure8_settings.j
 The default configuration is the manuscript configuration:
 $N=80$, 25 degree values from 4 to 22, $r=4,8,12$,
 $\omega=0.62$, 10 realizations, and base seed `13000`.
+Its 56,250 instance rows and 5,625 grid rows were checked against the archived
+manuscript data; all keys and certificate decisions match, with maximum
+absolute `rho_ratio` differences below `5e-11`.
 
 ```python
 from calculation_code import Figure8Config, generate_figure8_data
